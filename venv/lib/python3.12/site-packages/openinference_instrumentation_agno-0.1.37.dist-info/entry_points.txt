@@ -1,0 +1,5 @@
+[openinference_instrumentor]
+agno = openinference.instrumentation.agno:AgnoInstrumentor
+
+[opentelemetry_instrumentor]
+agno = openinference.instrumentation.agno:AgnoInstrumentor
