@@ -4,10 +4,9 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
-load_dotenv()
+load_dotenv(override=True)
 
 from agno.models.groq import Groq
-from agno.run.base import RunStatus
 from agno.skills import LocalSkills, Skills
 from agno.team import Team
 from agno.team.mode import TeamMode
@@ -46,10 +45,10 @@ def build_course_director() -> Team:
 
 async def review_course(director: Team, course_name: str, course_content: str):
     message = f"Course: {course_name}\n\nCurrent outline/content:\n{course_content}"
-    response = await director.arun(message, stream=False)
-    if response.status == RunStatus.completed:
-        director.session_state.setdefault("courses_reviewed", []).append(course_name)
-    return response
+    # print_response (not arun) so you can watch the Director delegate to each
+    # member and stream their work live, instead of waiting for one final dump.
+    await director.aprint_response(message, stream=True, show_member_responses=True)
+    director.session_state.setdefault("courses_reviewed", []).append(course_name)
 
 
 async def main():
@@ -59,28 +58,34 @@ async def main():
         pdf_path = sys.argv[1]
         course_name = Path(pdf_path).stem
         course_content = extract_pdf_text(pdf_path)
-        result = await review_course(director, course_name, course_content)
-        print(result.content)
+
+        # Groq free-tier TPM cap (8000 tokens/request) can't fit a full 96-page deck
+        # in one call. 12000 chars leaves headroom for instructions/skill overhead.
+        MAX_CHARS = 12000
+        if len(course_content) > MAX_CHARS:
+            print(f"[truncating course content from {len(course_content)} to {MAX_CHARS} chars for Groq's free-tier TPM limit]")
+            course_content = course_content[:MAX_CHARS]
+
+        await review_course(director, course_name, course_content)
         print("\n--- session_state ---")
         print(director.session_state)
         return
 
-    result1 = await review_course(
+    await review_course(
         director,
         "Intro to Web Development",
         "HTML basics, CSS basics, jQuery for interactivity, deploying via FTP to a shared host.",
     )
-    print(result1.content)
     print("\n--- session_state after course 1 ---")
     print(director.session_state)
 
-    result2 = await review_course(
+    print("\n" + "=" * 60 + "\n")
+
+    await review_course(
         director,
         "Data Structures 101",
         "Arrays and linked lists explained via 60-slide lecture, no coding exercises, final exam is the only assessment.",
     )
-    print("\n\n" + "=" * 60)
-    print(result2.content)
     print("\n--- session_state after course 2 ---")
     print(director.session_state)
 
